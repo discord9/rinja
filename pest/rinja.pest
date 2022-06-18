@@ -8,7 +8,7 @@ Rstmt = _{"%}"}
 lnstmt = _{"##"}
 
 WHITESPACE = _{ " " }
-keywords = {"for"|"endfor"|"if"|"else"|"endif"|"in"|"set"}
+keywords = {"for"|"endfor"|"if"|"else"|"endif"|"in"|"set"|"include"}
 // expr & stmt & comment
 alpha = _{ 'a'..'z' | 'A'..'Z' }
 digit = _{ '0'..'9' }
@@ -36,7 +36,14 @@ num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
     int = { ("+" | "-")? ~ ASCII_DIGIT+ }
 subs = {(ident ~ "." ~ ident) | (ident ~ "[" ~ str ~ "]")}
 expr = { term ~ (operation ~ term)* }
-term = _{ subs | ident | num |  "(" ~ expr ~ ")" }
+call = {ident ~ "("~ (expr ~ ("," ~ expr)*)? ~ ")" }
+term = _{ 
+    call
+    | "(" ~ expr ~ ")" 
+    | subs 
+    | ident 
+    | num 
+}
 
 // all the statement
 if_stmt = { Lstmt ~ "if" ~ expr ~ Rstmt
@@ -58,6 +65,8 @@ endfor = _{Lstmt ~ "endfor" ~ Rstmt
 | lnstmt ~ "endfor" ~ ("\n"|&EOI)}
 set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt
 | lnstmt ~ "set" ~ expr ~ "=" ~ expr ~ ("\n"|&EOI)}
+include_stmt = {Lstmt ~ "include" ~ str ~ Rstmt
+| lnstmt ~ "include" ~ str ~ ("\n"|&EOI)}
 
 //wrap means their wrapping deilmeter is also parsed
 wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
@@ -87,6 +96,7 @@ tmpl_literal = @{(!starting ~ ANY)+}
 tmpl_section = _{block
 | Lexpr ~ expr ~ Rexpr
 | set_stmt
+| include_stmt
 | wrap_comment
 | tmpl_literal
 }
