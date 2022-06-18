@@ -47,7 +47,7 @@ else_if_stmt = { Lstmt ~ "else" ~ "if" ~ expr ~ Rstmt
 | lnstmt ~ "else" ~ "if" ~ expr ~ "\n"
 }
 // else
-else_stmt = { Lstmt ~ "else" ~ Rstmt
+else_stmt = _{ Lstmt ~ "else" ~ Rstmt
 | lnstmt ~ "else" ~ "\n"}
 // only endif/for and set_stmt can append by End of Input
 endif = _{Lstmt ~ "endif" ~ Rstmt
@@ -78,7 +78,7 @@ block = {if_block | for_block}
 // to stop tmpl_literal
 starting = { Lexpr | Lcmt | Lstmt | lnstmt}
 // template literal any char other than starting symbol of tmpl var/expr/stmt
-tmpl_literal = @{(!starting ~ ANY)+}
+tmpl_literal = @{(!starting ~ ANY)*}
 tmpl_section = _{block ~ tmpl_section
 | Lexpr ~ expr ~ Rexpr ~ tmpl_section 
 | set_stmt ~ tmpl_section
