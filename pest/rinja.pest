@@ -1,0 +1,46 @@
+Lexpr = _{"{{"}
+Rexpr = _{"}}"}
+Lcmt = _{"{#"}
+Rcmt = _{"#}"}
+Lstmt = _{ "{%"}
+Rstmt = _{"%}"}
+lncmt = _{"##"}
+
+WHITESPACE = _{ " " }
+// expr & stmt & comment
+alpha = { 'a'..'z' | 'A'..'Z' }
+digit = { '0'..'9' }
+ident = { alpha ~ (alpha | digit)* }
+operation = _{ add | subtract | multiply | divide | power | shift | cmp }
+    add      = { "+" }
+    subtract = { "-" }
+    multiply = { "*" }
+    divide   = { "/" }
+    power    = { "^" }
+    shift   = { "<<" | ">>" }
+    cmp      = { "<=" | ">=" | "==" | "!=" | "<" | ">" }
+expr = { (ident ~ "." ~ ident) | ident }
+
+if_stmt = { "if" ~ expr ~ cmp ~ expr}
+endif = _{"endif"}
+single_stmt = { "set" ~ expr ~ "=" ~ expr | if_stmt | endif}
+
+//wrap means their wrapping deilmeter is also parsed
+wrap_expr = {Lexpr ~ expr ~ Rexpr}
+wrap_stmt = {Lstmt ~ single_stmt ~ Rstmt}
+wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
+wrap_line_comment = _{"##" ~ (!"\n" ~ ANY)* ~ "\n"}
+starting = { Lexpr | Lcmt | Lstmt | lncmt}
+
+// multiple or nested statement construct a 'block'
+if_block = { wrap_stmt ~ tmpl_literal? ~ endif}
+block = { if_block }
+
+tmpl_literal = @{(!starting ~ ANY)+}
+tmpl_unit = _{ tmpl_literal? ~ wrap_expr ~ tmpl_unit 
+| tmpl_literal? ~ block ~ tmpl_unit
+| tmpl_literal? ~ wrap_stmt ~ tmpl_unit 
+| tmpl_literal? ~ wrap_comment ~ tmpl_unit
+| tmpl_literal? ~ wrap_line_comment ~ tmpl_unit
+| EOI 
+| tmpl_literal ~ tmpl_unit}
