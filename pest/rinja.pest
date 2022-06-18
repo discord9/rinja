@@ -61,7 +61,6 @@ set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt
 
 //wrap means their wrapping deilmeter is also parsed
 wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
-wrap_line_comment = _{"##" ~ (!"\n" ~ ANY)* ~ "\n"}
 
 
 // multiple or nested statement construct a 'block'
@@ -89,7 +88,6 @@ tmpl_section = _{block
 | Lexpr ~ expr ~ Rexpr
 | set_stmt
 | wrap_comment
-| wrap_line_comment
 | tmpl_literal
 }
 tmpl_unit = _{ SOI ~ (!EOI ~ tmpl_section)* ~ EOI}
