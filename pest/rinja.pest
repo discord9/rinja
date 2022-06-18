@@ -1,16 +1,17 @@
+// replace it later with passing in params using tmpl?
 Lexpr = _{"{{"}
 Rexpr = _{"}}"}
 Lcmt = _{"{#"}
 Rcmt = _{"#}"}
 Lstmt = _{ "{%"}
 Rstmt = _{"%}"}
-lncmt = _{"##"}
+lnstmt = _{"##"}
 
 WHITESPACE = _{ " " }
 keywords = {"for"|"endfor"|"if"|"endif"|"in"|"set"}
 // expr & stmt & comment
-alpha = { 'a'..'z' | 'A'..'Z' }
-digit = { '0'..'9' }
+alpha = _{ 'a'..'z' | 'A'..'Z' }
+digit = _{ '0'..'9' }
 ident = @{ !keywords ~ alpha ~ (alpha | digit)* }
 operation = _{ add | subtract | multiply | divide | power | shift | cmp }
     add      = { "+" }
@@ -20,7 +21,19 @@ operation = _{ add | subtract | multiply | divide | power | shift | cmp }
     power    = { "^" }
     shift   = { "<<" | ">>" }
     cmp      = { "<=" | ">=" | "==" | "!=" | "<" | ">" }
-expr = { (ident ~ "." ~ ident) | ident }
+// for now escape_char is just a 
+escape_char = { "\\" ~ ((&"x" ~ "x" ~ ANY ~ ANY)|ANY) }
+str = {"\"" ~ 
+    (!"\"" ~ 
+        (
+            (&escape_char ~  ANY)
+            | ANY
+        )
+    )* 
+    ~ "\""
+    }
+subs = {(ident ~ "." ~ ident) | (ident ~ "[" ~ str ~ "]")}
+expr = { subs | ident }
 
 if_stmt = { Lstmt ~ "if" ~ expr ~ cmp ~ expr ~ Rstmt}
 endif = _{Lstmt ~ "endif" ~ Rstmt}
@@ -31,7 +44,7 @@ set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt}
 //wrap means their wrapping deilmeter is also parsed
 wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
 wrap_line_comment = _{"##" ~ (!"\n" ~ ANY)* ~ "\n"}
-starting = { Lexpr | Lcmt | Lstmt | lncmt}
+starting = { Lexpr | Lcmt | Lstmt | lnstmt}
 
 // multiple or nested statement construct a 'block'
 if_block = { if_stmt ~ tmpl_section ~ endif}
