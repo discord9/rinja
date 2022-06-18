@@ -32,10 +32,13 @@ str = {"\"" ~
     )* 
     ~ "\""
     }
+num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
+    int = { ("+" | "-")? ~ ASCII_DIGIT+ }
 subs = {(ident ~ "." ~ ident) | (ident ~ "[" ~ str ~ "]")}
-expr = { subs | ident }
+expr = { term ~ (operation ~ term)* }
+term = _{ num | subs | ident | "(" ~ expr ~ ")" }
 
-if_stmt = { Lstmt ~ "if" ~ expr ~ cmp ~ expr ~ Rstmt}
+if_stmt = { Lstmt ~ "if" ~ expr ~ Rstmt}
 endif = _{Lstmt ~ "endif" ~ Rstmt}
 for_stmt = { Lstmt ~ "for" ~ expr ~ "in" ~ expr ~ Rstmt}
 endfor = _{Lstmt ~ "endfor" ~ Rstmt}
