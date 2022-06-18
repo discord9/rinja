@@ -29,7 +29,6 @@ endfor = _{Lstmt ~ "endfor" ~ Rstmt}
 set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt}
 
 //wrap means their wrapping deilmeter is also parsed
-wrap_expr = {Lexpr ~ expr ~ Rexpr}
 wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
 wrap_line_comment = _{"##" ~ (!"\n" ~ ANY)* ~ "\n"}
 starting = { Lexpr | Lcmt | Lstmt | lncmt}
@@ -41,11 +40,11 @@ block = {if_block | for_block}
 
 // template literal any char other than starting symbol of tmpl var/expr/stmt
 tmpl_literal = @{(!starting ~ ANY)+}
-tmpl_section = _{ tmpl_literal? ~ wrap_expr ~ tmpl_unit 
-| tmpl_literal? ~ block ~ tmpl_unit
-| tmpl_literal? ~ set_stmt ~ tmpl_unit 
-| tmpl_literal? ~ wrap_comment ~ tmpl_unit
-| tmpl_literal? ~ wrap_line_comment ~ tmpl_unit
+tmpl_section = _{ tmpl_literal? ~ Lexpr ~ expr ~ Rexpr ~ tmpl_section 
+| tmpl_literal? ~ block ~ tmpl_section
+| tmpl_literal? ~ set_stmt ~ tmpl_section
+| tmpl_literal? ~ wrap_comment ~ tmpl_section
+| tmpl_literal? ~ wrap_line_comment ~ tmpl_section
 | tmpl_literal?}
 tmpl_unit = _{ SOI ~ tmpl_section? ~ EOI}
 
