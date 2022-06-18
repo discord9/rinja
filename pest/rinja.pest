@@ -7,10 +7,11 @@ Rstmt = _{"%}"}
 lncmt = _{"##"}
 
 WHITESPACE = _{ " " }
+keywords = {"for"|"endfor"|"if"|"endif"|"in"|"set"}
 // expr & stmt & comment
 alpha = { 'a'..'z' | 'A'..'Z' }
 digit = { '0'..'9' }
-ident = { alpha ~ (alpha | digit)* }
+ident = @{ !keywords ~ alpha ~ (alpha | digit)* }
 operation = _{ add | subtract | multiply | divide | power | shift | cmp }
     add      = { "+" }
     subtract = { "-" }
@@ -23,25 +24,28 @@ expr = { (ident ~ "." ~ ident) | ident }
 
 if_stmt = { Lstmt ~ "if" ~ expr ~ cmp ~ expr ~ Rstmt}
 endif = _{Lstmt ~ "endif" ~ Rstmt}
-single_stmt = { "set" ~ expr ~ "=" ~ expr}
+for_stmt = { Lstmt ~ "for" ~ expr ~ "in" ~ expr ~ Rstmt}
+endfor = _{Lstmt ~ "endfor" ~ Rstmt}
+set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt}
 
 //wrap means their wrapping deilmeter is also parsed
 wrap_expr = {Lexpr ~ expr ~ Rexpr}
-wrap_stmt = {Lstmt ~ single_stmt ~ Rstmt}
 wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
 wrap_line_comment = _{"##" ~ (!"\n" ~ ANY)* ~ "\n"}
 starting = { Lexpr | Lcmt | Lstmt | lncmt}
 
 // multiple or nested statement construct a 'block'
-if_block = { if_stmt ~ tmpl_unit ~ endif}
-block = { if_block }
+if_block = { if_stmt ~ tmpl_section ~ endif}
+for_block = {for_stmt ~ tmpl_section ~ endfor}
+block = {if_block | for_block}
 
 // template literal any char other than starting symbol of tmpl var/expr/stmt
 tmpl_literal = @{(!starting ~ ANY)+}
-tmpl_unit = _{ tmpl_literal? ~ wrap_expr ~ tmpl_unit 
-| tmpl_literal? ~ wrap_stmt ~ tmpl_unit 
+tmpl_section = _{ tmpl_literal? ~ wrap_expr ~ tmpl_unit 
+| tmpl_literal? ~ block ~ tmpl_unit
+| tmpl_literal? ~ set_stmt ~ tmpl_unit 
 | tmpl_literal? ~ wrap_comment ~ tmpl_unit
 | tmpl_literal? ~ wrap_line_comment ~ tmpl_unit
-| tmpl_literal? ~ block ~ tmpl_unit
-| EOI 
 | tmpl_literal?}
+tmpl_unit = _{ SOI ~ tmpl_section? ~ EOI}
+
