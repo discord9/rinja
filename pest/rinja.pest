@@ -34,7 +34,7 @@ str = {"\"" ~
     }
 num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
     int = { ("+" | "-")? ~ ASCII_DIGIT+ }
-subs = {(ident ~ "." ~ ident) | (ident ~ "[" ~ str ~ "]")}
+subs = {ident ~ ("." ~ ident|"[" ~ str ~ "]")+}
 expr = { term ~ (operation ~ term)* }
 call = {ident ~ "("~ (expr ~ ("," ~ expr)*)? ~ ")" }
 term = _{ 
