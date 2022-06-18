@@ -8,7 +8,7 @@ Rstmt = _{"%}"}
 lnstmt = _{"##"}
 
 WHITESPACE = _{ " " }
-keywords = {"for"|"endfor"|"if"|"endif"|"in"|"set"}
+keywords = {"for"|"endfor"|"if"|"else"|"endif"|"in"|"set"}
 // expr & stmt & comment
 alpha = _{ 'a'..'z' | 'A'..'Z' }
 digit = _{ '0'..'9' }
@@ -36,31 +36,54 @@ num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
     int = { ("+" | "-")? ~ ASCII_DIGIT+ }
 subs = {(ident ~ "." ~ ident) | (ident ~ "[" ~ str ~ "]")}
 expr = { term ~ (operation ~ term)* }
-term = _{ num | subs | ident | "(" ~ expr ~ ")" }
+term = _{ subs | ident | num |  "(" ~ expr ~ ")" }
 
-if_stmt = { Lstmt ~ "if" ~ expr ~ Rstmt}
-endif = _{Lstmt ~ "endif" ~ Rstmt}
-for_stmt = { Lstmt ~ "for" ~ expr ~ "in" ~ expr ~ Rstmt}
-endfor = _{Lstmt ~ "endfor" ~ Rstmt}
-set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt}
+// all the statement
+if_stmt = { Lstmt ~ "if" ~ expr ~ Rstmt
+| lnstmt ~ "if" ~ expr ~ "\n"
+}
+// else if
+else_if_stmt = { Lstmt ~ "else" ~ "if" ~ expr ~ Rstmt
+| lnstmt ~ "else" ~ "if" ~ expr ~ "\n"
+}
+// else
+else_stmt = { Lstmt ~ "else" ~ Rstmt
+| lnstmt ~ "else" ~ "\n"}
+// only endif/for and set_stmt can append by End of Input
+endif = _{Lstmt ~ "endif" ~ Rstmt
+| lnstmt ~ "endif" ~ ("\n"|&EOI)}
+for_stmt = { Lstmt ~ "for" ~ ((ident ~ "," ~ ident)|ident) ~ "in" ~ expr ~ Rstmt
+| lnstmt ~ "for" ~ ((ident ~ "," ~ ident)|ident) ~ "in" ~ expr ~ "\n"}
+endfor = _{Lstmt ~ "endfor" ~ Rstmt
+| lnstmt ~ "endfor" ~ ("\n"|&EOI)}
+set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt
+| lnstmt ~ "set" ~ expr ~ "=" ~ expr ~ ("\n"|&EOI)}
 
 //wrap means their wrapping deilmeter is also parsed
 wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
 wrap_line_comment = _{"##" ~ (!"\n" ~ ANY)* ~ "\n"}
-starting = { Lexpr | Lcmt | Lstmt | lnstmt}
+
 
 // multiple or nested statement construct a 'block'
-if_block = { if_stmt ~ tmpl_section ~ endif}
-for_block = {for_stmt ~ tmpl_section ~ endfor}
+if_body = {if_stmt ~ tmpl_section?}
+else_if_body = {else_if_stmt ~ tmpl_section?}
+else_body = {else_stmt ~ tmpl_section?}
+if_block = { if_body ~ 
+            else_if_body* ~ 
+            else_body?
+             ~ endif}
+for_block = {for_stmt ~ tmpl_section? ~ endfor}
 block = {if_block | for_block}
 
+// to stop tmpl_literal
+starting = { Lexpr | Lcmt | Lstmt | lnstmt}
 // template literal any char other than starting symbol of tmpl var/expr/stmt
 tmpl_literal = @{(!starting ~ ANY)+}
-tmpl_section = _{ tmpl_literal? ~ Lexpr ~ expr ~ Rexpr ~ tmpl_section 
-| tmpl_literal? ~ block ~ tmpl_section
-| tmpl_literal? ~ set_stmt ~ tmpl_section
-| tmpl_literal? ~ wrap_comment ~ tmpl_section
-| tmpl_literal? ~ wrap_line_comment ~ tmpl_section
-| tmpl_literal?}
+tmpl_section = _{block ~ tmpl_section
+| Lexpr ~ expr ~ Rexpr ~ tmpl_section 
+| set_stmt ~ tmpl_section
+| wrap_comment ~ tmpl_section
+| wrap_line_comment ~ tmpl_section
+| tmpl_literal}
 tmpl_unit = _{ SOI ~ tmpl_section? ~ EOI}
 
