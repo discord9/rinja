@@ -65,25 +65,32 @@ wrap_line_comment = _{"##" ~ (!"\n" ~ ANY)* ~ "\n"}
 
 
 // multiple or nested statement construct a 'block'
-if_body = {if_stmt ~ tmpl_section?}
-else_if_body = {else_if_stmt ~ tmpl_section?}
-else_body = {else_stmt ~ tmpl_section?}
+if_body = {if_stmt ~ 
+    ((!else_if_stmt|else_stmt|endif|EOI) ~ tmpl_section)*
+}
+else_if_body = {else_if_stmt ~ 
+    (!(else_stmt|endif|EOI) ~ tmpl_section)*
+}
+else_body = {else_stmt ~ 
+    (!(endif|EOI) ~ tmpl_section)*
+}
 if_block = { if_body ~ 
             else_if_body* ~ 
             else_body?
              ~ endif}
-for_block = {for_stmt ~ tmpl_section? ~ endfor}
+for_block = {for_stmt ~ (!endfor ~ tmpl_section)* ~ endfor}
 block = {if_block | for_block}
 
 // to stop tmpl_literal
 starting = { Lexpr | Lcmt | Lstmt | lnstmt}
 // template literal any char other than starting symbol of tmpl var/expr/stmt
-tmpl_literal = @{(!starting ~ ANY)*}
-tmpl_section = _{block ~ tmpl_section
-| Lexpr ~ expr ~ Rexpr ~ tmpl_section 
-| set_stmt ~ tmpl_section
-| wrap_comment ~ tmpl_section
-| wrap_line_comment ~ tmpl_section
-| tmpl_literal}
-tmpl_unit = _{ SOI ~ tmpl_section? ~ EOI}
+tmpl_literal = @{(!starting ~ ANY)+}
+tmpl_section = _{block
+| Lexpr ~ expr ~ Rexpr
+| set_stmt
+| wrap_comment
+| wrap_line_comment
+| tmpl_literal
+}
+tmpl_unit = _{ SOI ~ (!EOI ~ tmpl_section)* ~ EOI}
 
