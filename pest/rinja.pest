@@ -85,18 +85,18 @@ wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
 
 
 // multiple or nested statement construct a 'block'
-if_body = {if_stmt ~ 
+if_body = {
     ((!else_if_stmt|else_stmt|endif|EOI) ~ tmpl_section)*
 }
-else_if_body = {else_if_stmt ~ 
+else_if_body = { 
     (!(else_stmt|endif|EOI) ~ tmpl_section)*
 }
-else_body = {else_stmt ~ 
+else_body = {
     (!(endif|EOI) ~ tmpl_section)*
 }
-if_block = { if_body ~ 
-            else_if_body* ~ 
-            else_body?
+if_block = { if_stmt ~ if_body ~ 
+            (else_if_stmt ~ else_if_body)* ~ 
+            (else_stmt ~ else_body)?
              ~ endif}
 for_block = {for_stmt ~ (!endfor ~ tmpl_section)* ~ endfor}
 block = {if_block | for_block}

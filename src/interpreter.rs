@@ -45,6 +45,9 @@ pub trait Visitor {
     //fn visit_block(&mut self, s:&Pairs<Rule>)->T;
     fn visit_expr(&mut self, s: Pairs<Rule>);
     fn visit_single_stmt(&mut self, s: Pairs<Rule>);
+    fn visit_if_block(&mut self, s: Pairs<Rule>);
+    fn visit_for_block(&mut self, s: Pairs<Rule>);
+    fn visit_block(&mut self, s: Pairs<Rule>);
     fn visit_tmpl_unit(&mut self, s: Pairs<Rule>);
 }
 
@@ -263,6 +266,57 @@ impl Visitor for Interpreter {
             }
         }
     }
+    fn visit_if_block(&mut self, block: Pairs<Rule>) {
+        let mut if_flag:Option<bool> = None;
+        let mut else_if_flag: Option<bool> = None;
+        //let mut else_flag: Option<bool> = None;
+        for body in block{
+            match body.as_rule(){
+                Rule::if_stmt => {
+                    let pred = self.eval_expr(body.into_inner());
+                    if pred.is_boolean(){
+                        if_flag = Some(pred.as_bool().unwrap());
+                    }else{
+                        panic!("predicate only support bool!")
+                    }
+                },
+                Rule::if_body => {
+                    if let Some(true)=if_flag{
+                        self.visit_tmpl_unit(body.into_inner());
+                        break;
+                    }
+                }
+                Rule::else_if_stmt => {
+                    let pred = self.eval_expr(body.into_inner());
+                    if pred.is_boolean(){
+                        else_if_flag = Some(pred.as_bool().unwrap());
+                    }else{
+                        panic!("predicate only support bool!")
+                    }
+                },
+                Rule::else_if_body => {
+                    if let Some(true)=else_if_flag{
+                        self.visit_tmpl_unit(body.into_inner());
+                        break;
+                    }
+                },
+                Rule::else_body => self.visit_tmpl_unit(body.into_inner()),
+                _ => unreachable!()
+            }
+        }
+    }
+    fn visit_for_block(&mut self, b: Pairs<Rule>) {
+        
+    }
+    fn visit_block(&mut self, b: Pairs<Rule>) {
+        for b in b{
+            match b.as_rule(){
+                Rule::if_block => self.visit_if_block(b.into_inner()),
+                Rule::for_block => self.visit_for_block(b.into_inner()),
+                _ => unreachable!()
+            }
+        }
+    }
     fn visit_tmpl_unit(&mut self, unit: Pairs<Rule>) {
         //println!("Unit:{:?}", unit);
         //let unit = unit.to_owned().next().unwrap();
@@ -270,6 +324,7 @@ impl Visitor for Interpreter {
         self.render_result = String::with_capacity(unit.as_str().len() * 2);
         for tmpl_section in unit {
             match tmpl_section.as_rule() {
+                Rule::block => self.visit_block(tmpl_section.into_inner()),
                 Rule::single_stmt => self.visit_single_stmt(tmpl_section.into_inner()),
                 Rule::tmpl_literal => self.render_result.push_str(tmpl_section.as_str()),
                 Rule::expr => self.visit_expr(tmpl_section.into_inner()),
@@ -307,6 +362,13 @@ fn test_num_expr() {
 
     let renderer_tmpl = r#"## set a = b
     {{ a[1] }}
+    ## if a[0] == 0
+    123
+    ## else if a[1] == 1
+    456
+    ## else 
+    789
+    ## endif
     "#;
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     //println!("{:?}", res.to_owned().unwrap());
