@@ -104,15 +104,7 @@ impl Interpreter {
                         },
                         Rule::str => {
                             let res = self.eval_expr(Pairs::single(key.clone()));
-                            if res.is_i64() {
-                                if res.as_i64().unwrap() < 0 {
-                                    self.panic_renderer_error(key);
-                                }
-                                match query.get(res.as_i64().unwrap() as usize) {
-                                    Some(v) => query = v,
-                                    None => self.panic_renderer_error(key),
-                                }
-                            }else if res.is_string(){
+                            if res.is_string(){
                                 match query.get(res.as_str().unwrap()) {
                                     Some(v) => query = v,
                                     None => self.panic_renderer_error(key),
@@ -120,6 +112,13 @@ impl Interpreter {
                             }else{
                                 println!("{:?} Not yet support!", key.as_rule());
                                 unimplemented!()
+                            }
+                        },
+                        Rule::uint => {
+                            let res = key.as_str().parse::<usize>().unwrap();
+                            match query.get(res) {
+                                Some(v) => query = v,
+                                None => self.panic_renderer_error(key),
                             }
                         },
                         _ => unreachable!()
@@ -185,7 +184,7 @@ impl Visitor for Interpreter {
     fn visit_tmpl_unit(&mut self, unit: Pairs<Rule>) {
         //println!("Unit:{:?}", unit);
         let unit = unit.to_owned().next().unwrap();
-        println!("Unit:{:?}", unit);
+        
         self.render_result = String::with_capacity(unit.as_str().len() * 2);
         for tmpl_section in unit.into_inner() {
             match tmpl_section.as_rule() {
@@ -208,13 +207,14 @@ fn test_num_expr() {
     //println!("{:?}", res);
     let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":42}"#).unwrap());
     let res = interp.eval_expr(res.unwrap());
-    println!("{:?}", res);
+    //println!("{:?}", res);
     assert_eq!(res.as_f64().unwrap(), 379.0);
 
-    let res = RinjaParser::parse(Rule::tmpl_unit, "aa{{ a }}bb{{c.a}}");
+    let renderer_tmpl = "simple:{{ a }}, array:{{b[1]}},subs:{{c.a}}";
+    let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     //println!("{:?}", res.to_owned().unwrap());
     let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap());
     interp.visit_tmpl_unit(res.unwrap());
-    println!("Renderer Result: {}", interp.render_result);
-    assert_eq!(interp.render_result.as_str(), "aa43bb0");
+    println!("Renderer Template:\n{}\nRendererResult:\n{}", renderer_tmpl, interp.render_result);
+    assert_eq!(interp.render_result.as_str(), "simple:43, array:1,subs:0");
 }

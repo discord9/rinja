@@ -40,7 +40,8 @@ str = {"\"" ~
     }
 num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
     int = { ("+" | "-")? ~ ASCII_DIGIT+ }
-subs = {ident ~ ("." ~ ident|"[" ~ str ~ "]")+}
+uint = {"+"?~ASCII_DIGIT+}
+subs = {ident ~ ("." ~ ident|"[" ~ (str | uint) ~ "]")+}
 lvalue = {subs | ident}
 expr = { term ~ (operation ~ term)* }
 call = {ident ~ "("~ (expr ~ ("," ~ expr)*)? ~ ")" }
