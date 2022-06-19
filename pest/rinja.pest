@@ -115,5 +115,5 @@ tmpl_section = _{block
 }
 
 // like a comp unit, represent a entire tmpl file
-tmpl_unit = { SOI ~ (!EOI ~ tmpl_section)* ~ EOI}
+tmpl_unit = _{ SOI ~ (!EOI ~ tmpl_section)* ~ EOI}
 

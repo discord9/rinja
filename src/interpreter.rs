@@ -44,6 +44,7 @@ lazy_static! {
 pub trait Visitor {
     //fn visit_block(&mut self, s:&Pairs<Rule>)->T;
     fn visit_expr(&mut self, s: Pairs<Rule>);
+    fn visit_single_stmt(&mut self, s: Pairs<Rule>);
     fn visit_tmpl_unit(&mut self, s: Pairs<Rule>);
 }
 
@@ -181,12 +182,15 @@ impl Visitor for Interpreter {
             unimplemented!()
         }
     }
+    fn visit_single_stmt(&mut self, s: Pairs<Rule>) {
+
+    }
     fn visit_tmpl_unit(&mut self, unit: Pairs<Rule>) {
         //println!("Unit:{:?}", unit);
-        let unit = unit.to_owned().next().unwrap();
+        //let unit = unit.to_owned().next().unwrap();
         
         self.render_result = String::with_capacity(unit.as_str().len() * 2);
-        for tmpl_section in unit.into_inner() {
+        for tmpl_section in unit {
             match tmpl_section.as_rule() {
                 Rule::tmpl_literal => self.render_result.push_str(tmpl_section.as_str()),
                 Rule::expr => self.visit_expr(tmpl_section.into_inner()),
@@ -205,7 +209,7 @@ fn test_num_expr() {
     use crate::{Parser, RinjaParser};
     let res = RinjaParser::parse(Rule::expr, "1+a*3^2");
     //println!("{:?}", res);
-    let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":42}"#).unwrap());
+    let interp = Interpreter::new(serde_json::from_str(r#"{"a":42}"#).unwrap());
     let res = interp.eval_expr(res.unwrap());
     //println!("{:?}", res);
     assert_eq!(res.as_f64().unwrap(), 379.0);
