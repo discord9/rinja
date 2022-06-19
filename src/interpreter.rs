@@ -67,23 +67,66 @@ impl Interpreter {
             render_result: String::new(),
         }
     }
+    /// panic when encounter runtime error return type is `!` means divergence and never return (for type infer)
+    fn panic_renderer_error(&self, pair: Pair<Rule>) -> ! {
+        let (l, c) = pair.as_span().start_pos().line_col();
+        // Should panic because its interpreting so recover from error is not a good idea?
+        panic!(
+            "Variable {} not found!(At {}:{})",
+            pair.as_str().to_string(),
+            l,
+            c
+        );
+    }
+    fn get_val_from_env(&self, pair: Pair<Rule>) -> value::Value {
+        match self.env.get(pair.as_str()) {
+            Some(v) => v.to_owned(),
+            None => self.panic_renderer_error(pair),
+        }
+    }
+    // evaluate a expression without changing environment
     fn eval_expr(&self, expr: Pairs<Rule>) -> value::Value {
         use value::Value;
         let primary = |pair: Pair<Rule>| match pair.as_rule() {
             Rule::num => serde_json::from_str(pair.as_str()).unwrap(),
-            Rule::ident => match self.env.get(pair.as_str()) {
-                Some(v) => v.to_owned(),
-                None => {
-                    let (l, c) = pair.as_span().start_pos().line_col();
-                    // Should panic because its interpreting so recover from error is not a good idea?
-                    panic!(
-                        "Variable {} not found!(At {}:{})",
-                        pair.as_str().to_string(),
-                        l,
-                        c
-                    );
+            Rule::ident => self.get_val_from_env(pair),
+            Rule::subs => {
+                let mut query = &self.env;
+                // iter over subs to find out actual value
+                for key in pair.into_inner() {
+                    // subs can be ".a" or "["a"]"
+                    match key.as_rule(){
+                        Rule::ident => {
+                            match query.get(key.as_str()) {
+                                Some(v) => query = v,
+                                None => self.panic_renderer_error(key),
+                            }
+                        },
+                        Rule::str => {
+                            let res = self.eval_expr(Pairs::single(key.clone()));
+                            if res.is_i64() {
+                                if res.as_i64().unwrap() < 0 {
+                                    self.panic_renderer_error(key);
+                                }
+                                match query.get(res.as_i64().unwrap() as usize) {
+                                    Some(v) => query = v,
+                                    None => self.panic_renderer_error(key),
+                                }
+                            }else if res.is_string(){
+                                match query.get(res.as_str().unwrap()) {
+                                    Some(v) => query = v,
+                                    None => self.panic_renderer_error(key),
+                                }
+                            }else{
+                                println!("{:?} Not yet support!", key.as_rule());
+                                unimplemented!()
+                            }
+                        },
+                        _ => unreachable!()
+                    }
                 }
-            },
+                query.to_owned()
+            }
             // only ok for one child's case(which is true for prec_climber)
             Rule::expr => self.eval_expr(pair.into_inner()),
             _ => unimplemented!(),
@@ -168,10 +211,10 @@ fn test_num_expr() {
     println!("{:?}", res);
     assert_eq!(res.as_f64().unwrap(), 379.0);
 
-    let res = RinjaParser::parse(Rule::tmpl_unit, "aa{{ a }}bb");
+    let res = RinjaParser::parse(Rule::tmpl_unit, "aa{{ a }}bb{{c.a}}");
     //println!("{:?}", res.to_owned().unwrap());
-    let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":43}"#).unwrap());
+    let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap());
     interp.visit_tmpl_unit(res.unwrap());
     println!("Renderer Result: {}", interp.render_result);
-    assert_eq!(interp.render_result.as_str(), "aa43bb");
+    assert_eq!(interp.render_result.as_str(), "aa43bb0");
 }
