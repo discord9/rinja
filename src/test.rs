@@ -1,9 +1,7 @@
 #![cfg(test)]
 extern crate pest;
 use crate::pest::{Parser};
-#[derive(Parser)]
-#[grammar = "../pest/rinja.pest"]
-pub struct RinjaParser;
+use crate::{RinjaParser, Rule};
 
 #[test]
 fn manual_test(){

@@ -13,14 +13,20 @@ keywords = {"for"|"endfor"|"if"|"else"|"endif"|"in"|"set"|"include"}
 alpha = _{ 'a'..'z' | 'A'..'Z' }
 digit = _{ '0'..'9' }
 ident = @{ !keywords ~ alpha ~ (alpha | digit)* }
-operation = _{ add | subtract | multiply | divide | power | shift | cmp }
+operation = _{ add | subtract | multiply | divide | power | cmp }
     add      = { "+" }
     subtract = { "-" }
     multiply = { "*" }
     divide   = { "/" }
     power    = { "^" }
-    shift   = { "<<" | ">>" }
-    cmp      = { "<=" | ">=" | "==" | "!=" | "<" | ">" }
+    // shift   = { "<<" | ">>" }
+    cmp      = { ngt | nlt | eq | ne | lt | gt}
+        ngt = { "<=" }
+        nlt = { ">=" }
+        eq = { "==" }
+        ne = { "!=" }
+        lt = { "<" }
+        gt = { ">" }
 // for now escape_char is just a 
 escape_char = { "\\" ~ ((&"x" ~ "x" ~ ANY ~ ANY)|ANY) }
 str = {"\"" ~ 
@@ -59,15 +65,21 @@ else_stmt = _{ Lstmt ~ "else" ~ Rstmt
 // only endif/for and set_stmt can append by End of Input
 endif = _{Lstmt ~ "endif" ~ Rstmt
 | lnstmt ~ "endif" ~ ("\n"|&EOI)}
-for_stmt = { Lstmt ~ "for" ~ ((ident ~ "," ~ ident)|ident) ~ "in" ~ expr ~ Rstmt
+
+for_stmt = { Lstmt ~ 
+"for" ~ ((ident ~ "," ~ ident)|ident) ~ "in" ~ expr ~ Rstmt
 | lnstmt ~ "for" ~ ((ident ~ "," ~ ident)|ident) ~ "in" ~ expr ~ "\n"}
+
 endfor = _{Lstmt ~ "endfor" ~ Rstmt
 | lnstmt ~ "endfor" ~ ("\n"|&EOI)}
+
 set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt
 | lnstmt ~ "set" ~ expr ~ "=" ~ expr ~ ("\n"|&EOI)}
+
 include_stmt = {Lstmt ~ "include" ~ str ~ Rstmt
 | lnstmt ~ "include" ~ str ~ ("\n"|&EOI)}
 
+single_stmt = {set_stmt | include_stmt}
 //wrap means their wrapping deilmeter is also parsed
 wrap_comment = _{Lcmt ~ (!Rcmt ~ ANY)* ~ Rcmt}
 
@@ -95,8 +107,7 @@ starting = { Lexpr | Lcmt | Lstmt | lnstmt}
 tmpl_literal = @{(!starting ~ ANY)+}
 tmpl_section = _{block
 | Lexpr ~ expr ~ Rexpr
-| set_stmt
-| include_stmt
+| single_stmt
 | wrap_comment
 | tmpl_literal
 }
