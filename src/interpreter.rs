@@ -59,7 +59,7 @@ struct Interpreter {
 }
 
 impl Interpreter {
-    fn new(env: value::Value) -> Self {
+    fn new(env: value::Value, cap:usize) -> Self {
         use value::Value;
         let built_in_fn = HashMap::from([(
             "existsIn".to_string(),
@@ -68,7 +68,7 @@ impl Interpreter {
         Self {
             env,
             built_in_fn,
-            render_result: String::new(),
+            render_result: String::with_capacity(cap),
         }
     }
     
@@ -228,7 +228,9 @@ impl Interpreter {
 }
 impl Visitor for Interpreter {
     fn visit_expr(&mut self, expr: Pairs<Rule>) {
+        //dbg!(expr.as_str());
         let eval_res = self.eval_expr(expr);
+        //dbg!(eval_res.clone());
         if eval_res.is_string() {
             self.render_result.push_str(eval_res.as_str().unwrap());
         } else if eval_res.is_number() {
@@ -239,7 +241,9 @@ impl Visitor for Interpreter {
             } else {
                 unimplemented!()
             };
-            self.render_result.push_str(format!("{}", res).as_str())
+            //dbg!(res.clone());
+            self.render_result.push_str(&res);
+            //dbg!(self.render_result.clone());
         }else if eval_res.is_array(){
             println!("Renderer array in template is not yet supported: {}", eval_res);
             unimplemented!()
@@ -321,8 +325,9 @@ impl Visitor for Interpreter {
         //println!("Unit:{:?}", unit);
         //let unit = unit.to_owned().next().unwrap();
 
-        self.render_result = String::with_capacity(unit.as_str().len() * 2);
+        
         for tmpl_section in unit {
+            //dbg!((tmpl_section.as_rule(), tmpl_section.as_str()));
             match tmpl_section.as_rule() {
                 Rule::block => self.visit_block(tmpl_section.into_inner()),
                 Rule::single_stmt => self.visit_single_stmt(tmpl_section.into_inner()),
@@ -339,11 +344,37 @@ impl Visitor for Interpreter {
 }
 
 #[test]
+fn strange_bug() {
+    use crate::{Parser, RinjaParser};
+    let renderer_tmpl = r#"## set a = b
+{{ a[1] }}
+## if a[0] == 0
+abc
+## set a[0] = 42
+## else if a[1] == 1
+456
+## else 
+789
+## endif
+{{a[0] }}
+    "#;
+    let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
+    // println!("{:?}", res.to_owned().unwrap());
+    let mut interp =
+        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(), 200);
+    interp.visit_tmpl_unit(res.unwrap());
+    println!(
+        "Renderer Template:\n{}\nRendererResult:\n{}",
+        renderer_tmpl, interp.render_result
+    );
+}
+
+#[test]
 fn test_num_expr() {
     use crate::{Parser, RinjaParser};
     let res = RinjaParser::parse(Rule::expr, "1+a*3^2");
     //println!("{:?}", res);
-    let interp = Interpreter::new(serde_json::from_str(r#"{"a":42}"#).unwrap());
+    let interp = Interpreter::new(serde_json::from_str(r#"{"a":42}"#).unwrap(), 200);
     let res = interp.eval_expr(res.unwrap());
     //println!("{:?}", res);
     assert_eq!(res.as_f64().unwrap(), 379.0);
@@ -352,7 +383,7 @@ fn test_num_expr() {
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     //println!("{:?}", res.to_owned().unwrap());
     let mut interp =
-        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap());
+        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(), 200);
     interp.visit_tmpl_unit(res.unwrap());
     println!(
         "Renderer Template:\n{}\nRendererResult:\n{}",
@@ -361,19 +392,21 @@ fn test_num_expr() {
     assert_eq!(interp.render_result.as_str(), "simple:43, array:1,subs:0");
 
     let renderer_tmpl = r#"## set a = b
-    {{ a[1] }}
-    ## if a[0] == 0
-    123
-    ## else if a[1] == 1
-    456
-    ## else 
-    789
-    ## endif
+{{ a[1] }}
+## if a[0] == 0
+abc
+## set a[0] = 42
+## else if a[1] == 1
+456
+## else 
+789
+## endif
+{{a[0] }}
     "#;
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     //println!("{:?}", res.to_owned().unwrap());
     let mut interp =
-        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap());
+        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(), 200);
     interp.visit_tmpl_unit(res.unwrap());
     println!(
         "Renderer Template:\n{}\nRendererResult:\n{}",
