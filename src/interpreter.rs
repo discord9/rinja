@@ -41,9 +41,9 @@ lazy_static! {
     };
 }
 
-pub trait Visitor<T, E> {
+pub trait Visitor {
     //fn visit_block(&mut self, s:&Pairs<Rule>)->T;
-    fn visit_expr(&mut self, s: Pairs<Rule>) -> Result<T, E>;
+    fn visit_expr(&mut self, s: Pairs<Rule>);
     fn visit_tmpl_unit(&mut self, s: Pairs<Rule>);
 }
 
@@ -67,31 +67,26 @@ impl Interpreter {
             render_result: String::new(),
         }
     }
-}
-impl Visitor<value::Value, RendererError<'static>> for Interpreter {
-    fn visit_expr(&mut self, expr: Pairs<Rule>) -> Result<value::Value, RendererError<'static>> {
+    fn eval_expr(&self, expr: Pairs<Rule>) -> value::Value {
         use value::Value;
-        let primary = |pair: Pair<Rule>| {
-            // can direct unwrap because pset ensure it wouldn't have syntax error
-            let res = match pair.as_rule() {
-                Rule::num => serde_json::from_str(pair.as_str()).unwrap(),
-                Rule::ident => match self.env.get(pair.as_str()) {
-                    Some(v) => v.to_owned(),
-                    None => {
-                        let (l, c) = pair.as_span().start_pos().line_col();
-                        // Should panic because its interpreting so recover from error is not a good idea?
-                        panic!(
-                            "Variable {} not found!(At {}:{})",
-                            pair.as_str().to_string(),
-                            l,
-                            c
-                        );
-                    }
-                },
-                Rule::expr => self.visit_expr(pair.into_inner()).unwrap(),
-                _ => unimplemented!(),
-            };
-            res
+        let primary = |pair: Pair<Rule>| match pair.as_rule() {
+            Rule::num => serde_json::from_str(pair.as_str()).unwrap(),
+            Rule::ident => match self.env.get(pair.as_str()) {
+                Some(v) => v.to_owned(),
+                None => {
+                    let (l, c) = pair.as_span().start_pos().line_col();
+                    // Should panic because its interpreting so recover from error is not a good idea?
+                    panic!(
+                        "Variable {} not found!(At {}:{})",
+                        pair.as_str().to_string(),
+                        l,
+                        c
+                    );
+                }
+            },
+            // only ok for one child's case(which is true for prec_climber)
+            Rule::expr => self.eval_expr(pair.into_inner()),
+            _ => unimplemented!(),
         };
         let infix = |lhs: Value, op: Pair<Rule>, rhs: Value| {
             let (lhs, rhs) = {
@@ -122,7 +117,27 @@ impl Visitor<value::Value, RendererError<'static>> for Interpreter {
                 _ => unimplemented!(),
             }
         };
-        Ok(PREC_CLIMBER.climb(expr, primary, infix))
+
+        PREC_CLIMBER.climb(expr, primary, infix)
+    }
+}
+impl Visitor for Interpreter {
+    fn visit_expr(&mut self, expr: Pairs<Rule>) {
+        let eval_res = self.eval_expr(expr);
+        if eval_res.is_string() {
+            self.render_result.push_str(eval_res.as_str().unwrap());
+        } else if eval_res.is_number() {
+            let res = if eval_res.is_i64() {
+                eval_res.as_i64().unwrap().to_string()
+            } else if eval_res.is_f64() {
+                eval_res.as_f64().unwrap().to_string()
+            } else {
+                unimplemented!()
+            };
+            self.render_result.push_str(format!("{}", res).as_str())
+        } else {
+            unimplemented!()
+        }
     }
     fn visit_tmpl_unit(&mut self, unit: Pairs<Rule>) {
         //println!("Unit:{:?}", unit);
@@ -132,26 +147,12 @@ impl Visitor<value::Value, RendererError<'static>> for Interpreter {
         for tmpl_section in unit.into_inner() {
             match tmpl_section.as_rule() {
                 Rule::tmpl_literal => self.render_result.push_str(tmpl_section.as_str()),
-                Rule::expr => {
-                    let eval_res = self.visit_expr(tmpl_section.into_inner()).unwrap();
-                    if eval_res.is_string() {
-                        self.render_result.push_str(eval_res.as_str().unwrap());
-                    } else if eval_res.is_number() {
-                        let res = if eval_res.is_i64() {
-                            eval_res.as_i64().unwrap().to_string()
-                        } else if eval_res.is_f64() {
-                            eval_res.as_f64().unwrap().to_string()
-                        }else{unimplemented!()};
-                        self.render_result.push_str(format!("{}", res).as_str())
-                    } else {
-                        unimplemented!()
-                    }
-                }
+                Rule::expr => self.visit_expr(tmpl_section.into_inner()),
                 Rule::EOI => continue,
                 _ => {
                     println!("{:?} Not yet support!", tmpl_section.as_rule());
                     unimplemented!()
-                },
+                }
             }
         }
     }
@@ -163,11 +164,14 @@ fn test_num_expr() {
     let res = RinjaParser::parse(Rule::expr, "1+a*3^2");
     //println!("{:?}", res);
     let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":42}"#).unwrap());
-    println!("{:?}", interp.visit_expr(res.unwrap()));
-    
+    let res = interp.eval_expr(res.unwrap());
+    println!("{:?}", res);
+    assert_eq!(res.as_f64().unwrap(), 379.0);
+
     let res = RinjaParser::parse(Rule::tmpl_unit, "aa{{ a }}bb");
-    println!("{:?}", res.to_owned().unwrap());
-    let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":42}"#).unwrap());
+    //println!("{:?}", res.to_owned().unwrap());
+    let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":43}"#).unwrap());
     interp.visit_tmpl_unit(res.unwrap());
     println!("Renderer Result: {}", interp.render_result);
+    assert_eq!(interp.render_result.as_str(), "aa43bb");
 }
