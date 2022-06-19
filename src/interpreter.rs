@@ -237,7 +237,12 @@ impl Visitor for Interpreter {
                 unimplemented!()
             };
             self.render_result.push_str(format!("{}", res).as_str())
-        } else {
+        }else if eval_res.is_array(){
+            println!("Renderer array in template is not yet supported: {}", eval_res);
+            unimplemented!()
+        } 
+        else {
+            println!("Expect str/num in expr:{:?}", eval_res);
             unimplemented!()
         }
     }
@@ -301,7 +306,7 @@ fn test_num_expr() {
     assert_eq!(interp.render_result.as_str(), "simple:43, array:1,subs:0");
 
     let renderer_tmpl = r#"## set a = b
-    {{ a }}
+    {{ a[1] }}
     "#;
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     //println!("{:?}", res.to_owned().unwrap());
