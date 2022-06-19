@@ -250,8 +250,8 @@ impl Visitor for Interpreter {
                     let second = it.next().unwrap();
                     let e = self.eval_expr(Pairs::single(second));
                     let lval =  self.get_lvalue_mut(first);
-                    lval.clone_from(&e);
-                    // lval = e.clone();
+                    // lval.clone_from(&e);
+                    *lval = e.clone();
                 }
                 Rule::include_stmt => {}
                 _ => unreachable!(),
