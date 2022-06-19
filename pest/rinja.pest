@@ -29,15 +29,13 @@ operation = _{ add | subtract | multiply | divide | power | cmp }
         gt = { ">" }
 // for now escape_char is just a 
 escape_char = { "\\" ~ ((&"x" ~ "x" ~ ANY ~ ANY)|ANY) }
-str = {"\"" ~ 
-    (!"\"" ~ 
+str_content = {(!"\"" ~ 
         (
             (&escape_char ~  ANY)
             | ANY
         )
-    )* 
-    ~ "\""
-    }
+    )*}
+str = {"\"" ~ str_content ~ "\""}
 num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
     int = { ("+" | "-")? ~ ASCII_DIGIT+ }
 uint = {"+"?~ASCII_DIGIT+}

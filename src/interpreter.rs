@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, borrow::BorrowMut};
 
 use crate::Rule;
 use lazy_static::lazy_static;
@@ -68,8 +68,22 @@ impl Interpreter {
             render_result: String::new(),
         }
     }
-    /// panic when encounter runtime error return type is `!` means divergence and never return (for type infer)
+    
+    /* 
     fn panic_renderer_error(&self, pair: Pair<Rule>) -> ! {
+        let (l, c) = pair.as_span().start_pos().line_col();
+        // Should panic because its interpreting so recover from error is not a good idea?
+        panic!(
+            "Variable {} not found!(At {}:{})",
+            pair.as_str().to_string(),
+            l,
+            c
+        );
+    }
+    */
+
+    /// panic when encounter runtime error return type is `!` means divergence and never return (for type infer)
+    fn panic_renderer_error(pair: Pair<Rule>) -> ! {
         let (l, c) = pair.as_span().start_pos().line_col();
         // Should panic because its interpreting so recover from error is not a good idea?
         panic!(
@@ -82,8 +96,73 @@ impl Interpreter {
     fn get_val_from_env(&self, pair: Pair<Rule>) -> value::Value {
         match self.env.get(pair.as_str()) {
             Some(v) => v.to_owned(),
-            None => self.panic_renderer_error(pair),
+            None => Interpreter::panic_renderer_error(pair),
         }
+    }
+    fn get_subs_mut(&mut self, subs: Pair<Rule>)->&mut value::Value{
+        let mut query = &mut self.env;
+        // iter over subs to find out actual value
+        for key in subs.into_inner() {
+            // subs can be ".a" or "["a"]"
+            match key.as_rule() {
+                Rule::ident => match query.get_mut(key.as_str()) {
+                    Some(v) => query = v,
+                    None => Interpreter::panic_renderer_error(key),
+                },
+                Rule::str => {
+                    let res = key.clone().into_inner().next().unwrap().as_str();
+                    {
+                        match query.get_mut(res) {
+                            Some(v) => query = v,
+                            None =>  Interpreter::panic_renderer_error(key),
+                        }
+                    }
+                }
+                Rule::uint => {
+                    let res = key.as_str().parse::<usize>().unwrap();
+                    match query.get_mut(res) {
+                        Some(v) => query = v,
+                        None =>  Interpreter::panic_renderer_error(key),
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        query
+    }
+    fn get_subs(&self, subs: Pair<Rule>)->&value::Value{
+        let mut query = &self.env;
+        // iter over subs to find out actual value
+        for key in subs.into_inner() {
+            // subs can be ".a" or "["a"]"
+            match key.as_rule() {
+                Rule::ident => match query.get(key.as_str()) {
+                    Some(v) => query = v,
+                    None =>  Interpreter::panic_renderer_error(key),
+                },
+                Rule::str => {
+                    let res = self.eval_expr(Pairs::single(key.clone()));
+                    if res.is_string() {
+                        match query.get(res.as_str().unwrap()) {
+                            Some(v) => query = v,
+                            None =>  Interpreter::panic_renderer_error(key),
+                        }
+                    } else {
+                        println!("{:?} Not yet support!", key.as_rule());
+                        unimplemented!()
+                    }
+                }
+                Rule::uint => {
+                    let res = key.as_str().parse::<usize>().unwrap();
+                    match query.get(res) {
+                        Some(v) => query = v,
+                        None => Interpreter::panic_renderer_error(key),
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        query
     }
     // evaluate a expression without changing environment
     fn eval_expr(&self, expr: Pairs<Rule>) -> value::Value {
@@ -92,40 +171,7 @@ impl Interpreter {
             Rule::num => serde_json::from_str(pair.as_str()).unwrap(),
             Rule::ident => self.get_val_from_env(pair),
             Rule::subs => {
-                let mut query = &self.env;
-                // iter over subs to find out actual value
-                for key in pair.into_inner() {
-                    // subs can be ".a" or "["a"]"
-                    match key.as_rule(){
-                        Rule::ident => {
-                            match query.get(key.as_str()) {
-                                Some(v) => query = v,
-                                None => self.panic_renderer_error(key),
-                            }
-                        },
-                        Rule::str => {
-                            let res = self.eval_expr(Pairs::single(key.clone()));
-                            if res.is_string(){
-                                match query.get(res.as_str().unwrap()) {
-                                    Some(v) => query = v,
-                                    None => self.panic_renderer_error(key),
-                                }
-                            }else{
-                                println!("{:?} Not yet support!", key.as_rule());
-                                unimplemented!()
-                            }
-                        },
-                        Rule::uint => {
-                            let res = key.as_str().parse::<usize>().unwrap();
-                            match query.get(res) {
-                                Some(v) => query = v,
-                                None => self.panic_renderer_error(key),
-                            }
-                        },
-                        _ => unreachable!()
-                    }
-                }
-                query.to_owned()
+                self.get_subs(pair).to_owned()
             }
             // only ok for one child's case(which is true for prec_climber)
             Rule::expr => self.eval_expr(pair.into_inner()),
@@ -182,16 +228,27 @@ impl Visitor for Interpreter {
             unimplemented!()
         }
     }
-    fn visit_single_stmt(&mut self, s: Pairs<Rule>) {
-
+    fn visit_single_stmt(&mut self, stmt: Pairs<Rule>) {
+        for stmt in stmt {
+            match stmt.as_rule() {
+                Rule::set_stmt => {
+                    let mut it = stmt.into_inner();
+                    let lval = it.next().unwrap();
+                    let e = self.eval_expr(Pairs::single(it.next().unwrap()));
+                }
+                Rule::include_stmt => {}
+                _ => unreachable!(),
+            }
+        }
     }
     fn visit_tmpl_unit(&mut self, unit: Pairs<Rule>) {
         //println!("Unit:{:?}", unit);
         //let unit = unit.to_owned().next().unwrap();
-        
+
         self.render_result = String::with_capacity(unit.as_str().len() * 2);
         for tmpl_section in unit {
             match tmpl_section.as_rule() {
+                Rule::single_stmt => self.visit_single_stmt(tmpl_section.into_inner()),
                 Rule::tmpl_literal => self.render_result.push_str(tmpl_section.as_str()),
                 Rule::expr => self.visit_expr(tmpl_section.into_inner()),
                 Rule::EOI => continue,
@@ -217,8 +274,12 @@ fn test_num_expr() {
     let renderer_tmpl = "simple:{{ a }}, array:{{b[1]}},subs:{{c.a}}";
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     //println!("{:?}", res.to_owned().unwrap());
-    let mut interp = Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap());
+    let mut interp =
+        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap());
     interp.visit_tmpl_unit(res.unwrap());
-    println!("Renderer Template:\n{}\nRendererResult:\n{}", renderer_tmpl, interp.render_result);
+    println!(
+        "Renderer Template:\n{}\nRendererResult:\n{}",
+        renderer_tmpl, interp.render_result
+    );
     assert_eq!(interp.render_result.as_str(), "simple:43, array:1,subs:0");
 }
