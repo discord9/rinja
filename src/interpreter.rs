@@ -99,6 +99,19 @@ impl Interpreter {
             None => Interpreter::panic_renderer_error(pair),
         }
     }
+
+    // get left value mut-ly
+    fn get_lvalue_mut(&mut self, lval: Pair<Rule>)->&mut value::Value{
+        let first = lval.into_inner().next().unwrap();
+        match first.as_rule(){
+            Rule::ident => match self.env.get_mut(first.as_str()) {
+                Some(v) => v,
+                None => Interpreter::panic_renderer_error(first),
+            },
+            Rule::subs => self.get_subs_mut(first),
+            _ => unreachable!()
+        }
+    }
     fn get_subs_mut(&mut self, subs: Pair<Rule>)->&mut value::Value{
         let mut query = &mut self.env;
         // iter over subs to find out actual value
@@ -233,8 +246,12 @@ impl Visitor for Interpreter {
             match stmt.as_rule() {
                 Rule::set_stmt => {
                     let mut it = stmt.into_inner();
-                    let lval = it.next().unwrap();
-                    let e = self.eval_expr(Pairs::single(it.next().unwrap()));
+                    let first = it.next().unwrap();
+                    let second = it.next().unwrap();
+                    let e = self.eval_expr(Pairs::single(second));
+                    let lval =  self.get_lvalue_mut(first);
+                    lval.clone_from(&e);
+                    // lval = e.clone();
                 }
                 Rule::include_stmt => {}
                 _ => unreachable!(),
@@ -282,4 +299,17 @@ fn test_num_expr() {
         renderer_tmpl, interp.render_result
     );
     assert_eq!(interp.render_result.as_str(), "simple:43, array:1,subs:0");
+
+    let renderer_tmpl = r#"## set a = b
+    {{ a }}
+    "#;
+    let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
+    //println!("{:?}", res.to_owned().unwrap());
+    let mut interp =
+        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap());
+    interp.visit_tmpl_unit(res.unwrap());
+    println!(
+        "Renderer Template:\n{}\nRendererResult:\n{}",
+        renderer_tmpl, interp.render_result
+    );
 }
