@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use crate::Rule;
 use pest::{Span, iterators::{Pair, Pairs}, prec_climber::{PrecClimber, Assoc, Operator}};
-use serde_json::value;
+use serde_json::{value, Value};
 use lazy_static::lazy_static;
 
 #[derive(Debug)]
@@ -35,12 +37,22 @@ pub trait Visitor<T,E> {
     fn visit_expr(&mut self, s:Pairs<Rule>)->Result<T,E>;
 }
 
+type BuiltIn = Box<dyn Fn(value::Value)->value::Value>;
 struct Interpreter{
-    env: value::Value,// not ref because it may be modify by {% set subs = expr %}
-};
+    env: value::Value,// not ref because it may be modify by {% set lvalue = expr %}
+    built_in_fn: HashMap<String, BuiltIn>
+}
+
 impl Interpreter{
-    fn new()->Self{
-        Self{}
+    fn new(env: value::Value)->Self{
+        use value::Value;
+        let built_in_fn = HashMap::from([
+            ("existIn".to_string(), Box::new(|a|a) as BuiltIn)
+        ]);
+        Self{
+            env,
+            built_in_fn
+        }
     }
 }
 impl Visitor<value::Value, RendererError> for Interpreter{
