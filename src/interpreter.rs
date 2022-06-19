@@ -35,7 +35,9 @@ pub trait Visitor<T,E> {
     fn visit_expr(&mut self, s:Pairs<Rule>)->Result<T,E>;
 }
 
-struct Interpreter;
+struct Interpreter{
+    env: value::Value,// not ref because it may be modify by {% set subs = expr %}
+};
 impl Interpreter{
     fn new()->Self{
         Self{}
@@ -89,7 +91,7 @@ impl Visitor<value::Value, RendererError> for Interpreter{
 #[test]
 fn test_num_expr(){
     use crate::{RinjaParser, Parser};
-    let res = RinjaParser::parse(Rule::expr, "1+1<0");
+    let res = RinjaParser::parse(Rule::expr, "1+2*3^2!=18");
     println!("{:?}", res);
     let mut interp = Interpreter::new();
     println!("{:?}", interp.visit_expr(res.unwrap()));

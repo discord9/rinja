@@ -41,6 +41,7 @@ str = {"\"" ~
 num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
     int = { ("+" | "-")? ~ ASCII_DIGIT+ }
 subs = {ident ~ ("." ~ ident|"[" ~ str ~ "]")+}
+lvalue = {subs | ident}
 expr = { term ~ (operation ~ term)* }
 call = {ident ~ "("~ (expr ~ ("," ~ expr)*)? ~ ")" }
 term = _{ 
@@ -73,8 +74,8 @@ for_stmt = { Lstmt ~
 endfor = _{Lstmt ~ "endfor" ~ Rstmt
 | lnstmt ~ "endfor" ~ ("\n"|&EOI)}
 
-set_stmt = {Lstmt ~  "set" ~ expr ~ "=" ~ expr ~ Rstmt
-| lnstmt ~ "set" ~ expr ~ "=" ~ expr ~ ("\n"|&EOI)}
+set_stmt = {Lstmt ~  "set" ~ lvalue ~ "=" ~ expr ~ Rstmt
+| lnstmt ~ "set" ~ lvalue ~ "=" ~ expr ~ ("\n"|&EOI)}
 
 include_stmt = {Lstmt ~ "include" ~ str ~ Rstmt
 | lnstmt ~ "include" ~ str ~ ("\n"|&EOI)}
