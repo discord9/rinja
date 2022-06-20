@@ -10,9 +10,9 @@ lnstmt = _{"##"}
 WHITESPACE = _{ " " }
 keywords = {"for"|"endfor"|"if"|"else"|"endif"|"in"|"set"|"include"}
 // expr & stmt & comment
-alpha = _{ 'a'..'z' | 'A'..'Z' }
+alpha = _{ 'a'..'z' | 'A'..'Z' | "_" }
 digit = _{ '0'..'9' }
-ident = @{ !keywords ~ alpha ~ (alpha | digit)* }
+ident = @{ !(keywords ~ WHITESPACE)  ~ alpha ~ (alpha | digit)* }
 operation = _{ add | subtract | multiply | divide | power | cmp }
     add      = { "+" }
     subtract = { "-" }
@@ -68,11 +68,14 @@ endif = _{Lstmt ~ "endif" ~ Rstmt
 
 iter = {(ident ~ "," ~ ident)|ident }
 for_stmt = { 
-  Lstmt ~ "for" ~ iter ~ "in" ~ expr ~ Rstmt
-| lnstmt ~ "for" ~ iter ~ "in" ~ expr ~ "\n"}
+  Lstmt ~ "for" ~ iter ~ "in" ~ expr ~ Rstmt ~ for_body
+| lnstmt ~ "for" ~ iter ~ "in" ~ expr ~ "\n" ~ for_body}
+    for_body = {(!endfor ~ tmpl_section)*}
 
 endfor = _{Lstmt ~ "endfor" ~ Rstmt
 | lnstmt ~ "endfor" ~ ("\n"|&EOI)}
+
+for_block = {for_stmt ~ endfor}
 
 set_stmt = {Lstmt ~  "set" ~ lvalue ~ "=" ~ expr ~ Rstmt
 | lnstmt ~ "set" ~ lvalue ~ "=" ~ expr ~ ("\n"|&EOI)}
@@ -99,8 +102,7 @@ if_block = { if_stmt ~ if_body ~
             (else_if_stmt ~ else_if_body)* ~ 
             (else_stmt ~ else_body)?
              ~ endif}
-for_body = {(!endfor ~ tmpl_section)*}
-for_block = {for_stmt ~ for_body ~ endfor}
+
 block = {if_block | for_block}
 
 // to stop tmpl_literal
