@@ -101,8 +101,10 @@ impl Interpreter {
 
     // give a ident return value
     fn get_val_from_env(&self, pair: Pair<Rule>) -> value::Value {
+        //dbg!(pair.as_str());
+        let ident = pair.as_str();
         for t in self.tmp_var.iter().rev() {
-            if let Some(v) = t.get(pair.as_str()) {
+            if let Some(v) = t.get(ident) {
                 return v.to_owned();
             }
         }
@@ -161,10 +163,22 @@ impl Interpreter {
         for key in subs.into_inner() {
             // subs can be ".a" or "["a"]"
             match key.as_rule() {
-                Rule::ident => match query.get(key.as_str()) {
-                    Some(v) => query = v,
-                    None => Interpreter::panic_renderer_error(key),
-                },
+                Rule::ident => {
+                    let mut flag = false;
+                    for t in self.tmp_var.iter().rev() {
+                        if let Some(v) = t.get(key.as_str()) {
+                            query = v;
+                            flag = true;
+                        }
+                    }
+                    if flag {
+                        continue;
+                    }
+                    match query.get(key.as_str()) {
+                        Some(v) => query = v,
+                        None => Interpreter::panic_renderer_error(key),
+                    }
+                }
                 Rule::str => {
                     let res = self.eval_expr(Pairs::single(key.clone()));
                     if res.is_string() {
@@ -318,31 +332,72 @@ impl Visitor for Interpreter {
         }
     }
     fn visit_for_block(&mut self, b: Pairs<Rule>) {
-        let parent = match self.tmp_var.last().to_owned(){
+        let parent = match self.tmp_var.last().to_owned() {
             Some(v) => v.to_owned(),
-            None => value::Value::Null
+            None => value::Value::Null,
         };
+        let idx: usize = 0;
         let current = json!({
             "loop":{
-                "index": 0,
-                "index1": 1,
-                "is_first": true,
+                "index": idx,
+                "index1": idx + 1,
+                "is_first": false,
                 "is_last": false,
                 "parent": parent
             }
         });
         self.tmp_var.push(current);
+        // dbg!(self.tmp_var.to_owned());
         for b in b {
             match b.as_rule() {
                 Rule::for_stmt => {
                     let mut for_stmt = b.into_inner();
                     let it = for_stmt.next().unwrap();
+                    let into_vec = |it: Pair<Rule>| -> Vec<String> {
+                        it.into_inner().map(|a| a.as_str().to_owned()).collect()
+                    };
+                    let it_var = into_vec(it);
                     let expr = for_stmt.next().unwrap();
                     let expr = self.eval_expr(expr.into_inner());
+                    let for_body = for_stmt.next().unwrap();
                     if !expr.is_array() && !expr.is_object() {
                         panic!("Iterate over non-array/object is not support: {:?}", expr);
                     }
-                    todo!()
+                    if expr.is_array() {
+                        let arr = expr.as_array().unwrap();
+                        let len = arr.len();
+                        for (i, elem) in arr.iter().enumerate() {
+                            let loop_var = self.tmp_var.last_mut().unwrap();
+                            loop_var["loop"]["index"] = json!(i);
+                            loop_var["loop"]["index1"] = json!(i + 1);
+                            let is_first = loop_var["loop"]["is_first"].borrow_mut();
+                            if i == 0 {
+                                *is_first = json!(true);
+                            }else{
+                                *is_first = json!(false);
+                            }
+                            let is_last = loop_var["loop"]["is_last"].borrow_mut();
+                            if i == len - 1 {
+                                *is_last = json!(true);
+                            }else {
+                                *is_last = json!(false);
+                            }
+                            match it_var.len() {
+                                1 => loop_var[it_var[0].as_str()] = elem.to_owned(),
+                                2 => {
+                                    loop_var[it_var[0].as_str()] = json!(i);
+                                    loop_var[it_var[1].as_str()] = elem.to_owned();
+                                }
+                                _ => unreachable!(),
+                            }
+                            self.visit_tmpl_unit(for_body.to_owned().into_inner());
+                            let loop_var = self.tmp_var.last_mut().unwrap();
+                        }
+                    } else if expr.is_object() {
+                        todo!()
+                    } else {
+                        unimplemented!()
+                    }
                 }
                 Rule::for_body => {}
                 _ => unimplemented!(),
@@ -380,19 +435,12 @@ impl Visitor for Interpreter {
 }
 
 #[test]
-fn strange_bug() {
+fn test_plyground() {
     use crate::{Parser, RinjaParser};
     let renderer_tmpl = r#"## set a = b
-{{ a[1] }}
-## if a[0] == 1
-abc
-## set a[0] = 42
-## else if a[1] == 1
-456
-## else 
-789
-## endif
-{{ a[0] }}
+## for i in b
+{% for j in b %}-{{i^j + j^i}}{% endfor %}
+## endfor
     "#;
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     // println!("{:?}", res.to_owned().unwrap());
