@@ -1,4 +1,4 @@
-use std::{collections::HashMap, borrow::BorrowMut};
+use std::{borrow::BorrowMut, collections::HashMap};
 
 use crate::Rule;
 use lazy_static::lazy_static;
@@ -7,7 +7,7 @@ use pest::{
     prec_climber::{Assoc, Operator, PrecClimber},
     Span,
 };
-use serde_json::value;
+use serde_json::{json, value};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -54,12 +54,13 @@ pub trait Visitor {
 type BuiltIn = Box<dyn Fn(Vec<value::Value>) -> value::Value>;
 struct Interpreter {
     env: value::Value, // not ref because it may be modify by {% set lvalue = expr %}
+    tmp_var: Vec<value::Value>, // search in tmp_var first(like in for statement)
     built_in_fn: HashMap<String, BuiltIn>,
     render_result: String,
 }
 
 impl Interpreter {
-    fn new(env: value::Value, cap:usize) -> Self {
+    fn new(env: value::Value, cap: usize) -> Self {
         use value::Value;
         let built_in_fn = HashMap::from([(
             "existsIn".to_string(),
@@ -67,12 +68,13 @@ impl Interpreter {
         )]);
         Self {
             env,
+            tmp_var: Vec::new(),
             built_in_fn,
             render_result: String::with_capacity(cap),
         }
     }
-    
-    /* 
+
+    /*
     fn panic_renderer_error(&self, pair: Pair<Rule>) -> ! {
         let (l, c) = pair.as_span().start_pos().line_col();
         // Should panic because its interpreting so recover from error is not a good idea?
@@ -96,7 +98,14 @@ impl Interpreter {
             c
         );
     }
+
+    // give a ident return value
     fn get_val_from_env(&self, pair: Pair<Rule>) -> value::Value {
+        for t in self.tmp_var.iter().rev() {
+            if let Some(v) = t.get(pair.as_str()) {
+                return v.to_owned();
+            }
+        }
         match self.env.get(pair.as_str()) {
             Some(v) => v.to_owned(),
             None => Interpreter::panic_renderer_error(pair),
@@ -104,18 +113,18 @@ impl Interpreter {
     }
 
     // get left value mut-ly
-    fn get_lvalue_mut(&mut self, lval: Pair<Rule>)->&mut value::Value{
+    fn get_lvalue_mut(&mut self, lval: Pair<Rule>) -> &mut value::Value {
         let first = lval.into_inner().next().unwrap();
-        match first.as_rule(){
+        match first.as_rule() {
             Rule::ident => match self.env.get_mut(first.as_str()) {
                 Some(v) => v,
                 None => Interpreter::panic_renderer_error(first),
             },
             Rule::subs => self.get_subs_mut(first),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
-    fn get_subs_mut(&mut self, subs: Pair<Rule>)->&mut value::Value{
+    fn get_subs_mut(&mut self, subs: Pair<Rule>) -> &mut value::Value {
         let mut query = &mut self.env;
         // iter over subs to find out actual value
         for key in subs.into_inner() {
@@ -130,7 +139,7 @@ impl Interpreter {
                     {
                         match query.get_mut(res) {
                             Some(v) => query = v,
-                            None =>  Interpreter::panic_renderer_error(key),
+                            None => Interpreter::panic_renderer_error(key),
                         }
                     }
                 }
@@ -138,7 +147,7 @@ impl Interpreter {
                     let res = key.as_str().parse::<usize>().unwrap();
                     match query.get_mut(res) {
                         Some(v) => query = v,
-                        None =>  Interpreter::panic_renderer_error(key),
+                        None => Interpreter::panic_renderer_error(key),
                     }
                 }
                 _ => unreachable!(),
@@ -146,7 +155,7 @@ impl Interpreter {
         }
         query
     }
-    fn get_subs(&self, subs: Pair<Rule>)->&value::Value{
+    fn get_subs(&self, subs: Pair<Rule>) -> &value::Value {
         let mut query = &self.env;
         // iter over subs to find out actual value
         for key in subs.into_inner() {
@@ -154,14 +163,14 @@ impl Interpreter {
             match key.as_rule() {
                 Rule::ident => match query.get(key.as_str()) {
                     Some(v) => query = v,
-                    None =>  Interpreter::panic_renderer_error(key),
+                    None => Interpreter::panic_renderer_error(key),
                 },
                 Rule::str => {
                     let res = self.eval_expr(Pairs::single(key.clone()));
                     if res.is_string() {
                         match query.get(res.as_str().unwrap()) {
                             Some(v) => query = v,
-                            None =>  Interpreter::panic_renderer_error(key),
+                            None => Interpreter::panic_renderer_error(key),
                         }
                     } else {
                         println!("{:?} Not yet support!", key.as_rule());
@@ -186,9 +195,7 @@ impl Interpreter {
         let primary = |pair: Pair<Rule>| match pair.as_rule() {
             Rule::num => serde_json::from_str(pair.as_str()).unwrap(),
             Rule::ident => self.get_val_from_env(pair),
-            Rule::subs => {
-                self.get_subs(pair).to_owned()
-            }
+            Rule::subs => self.get_subs(pair).to_owned(),
             // only ok for one child's case(which is true for prec_climber)
             Rule::expr => self.eval_expr(pair.into_inner()),
             _ => unimplemented!(),
@@ -244,11 +251,13 @@ impl Visitor for Interpreter {
             //dbg!(res.clone());
             self.render_result.push_str(&res);
             //dbg!(self.render_result.clone());
-        }else if eval_res.is_array(){
-            println!("Renderer array in template is not yet supported: {}", eval_res);
+        } else if eval_res.is_array() {
+            println!(
+                "Renderer array in template is not yet supported: {}",
+                eval_res
+            );
             unimplemented!()
-        } 
-        else {
+        } else {
             println!("Expect str/num in expr:{:?}", eval_res);
             unimplemented!()
         }
@@ -261,7 +270,7 @@ impl Visitor for Interpreter {
                     let first = it.next().unwrap();
                     let second = it.next().unwrap();
                     let e = self.eval_expr(Pairs::single(second));
-                    let lval =  self.get_lvalue_mut(first);
+                    let lval = self.get_lvalue_mut(first);
                     // lval.clone_from(&e);
                     *lval = e.clone();
                 }
@@ -271,61 +280,88 @@ impl Visitor for Interpreter {
         }
     }
     fn visit_if_block(&mut self, block: Pairs<Rule>) {
-        let mut if_flag:Option<bool> = None;
+        let mut if_flag: Option<bool> = None;
         let mut else_if_flag: Option<bool> = None;
-        //let mut else_flag: Option<bool> = None;
-        for body in block{
-            match body.as_rule(){
+        for body in block {
+            match body.as_rule() {
                 Rule::if_stmt => {
                     let pred = self.eval_expr(body.into_inner());
-                    if pred.is_boolean(){
+                    if pred.is_boolean() {
                         if_flag = Some(pred.as_bool().unwrap());
-                    }else{
+                    } else {
                         panic!("predicate only support bool!")
                     }
-                },
+                }
                 Rule::if_body => {
-                    if let Some(true)=if_flag{
+                    if let Some(true) = if_flag {
                         self.visit_tmpl_unit(body.into_inner());
                         break;
                     }
                 }
                 Rule::else_if_stmt => {
                     let pred = self.eval_expr(body.into_inner());
-                    if pred.is_boolean(){
+                    if pred.is_boolean() {
                         else_if_flag = Some(pred.as_bool().unwrap());
-                    }else{
+                    } else {
                         panic!("predicate only support bool!")
                     }
-                },
+                }
                 Rule::else_if_body => {
-                    if let Some(true)=else_if_flag{
+                    if let Some(true) = else_if_flag {
                         self.visit_tmpl_unit(body.into_inner());
                         break;
                     }
-                },
+                }
                 Rule::else_body => self.visit_tmpl_unit(body.into_inner()),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
     }
     fn visit_for_block(&mut self, b: Pairs<Rule>) {
-        
+        let parent = match self.tmp_var.last().to_owned(){
+            Some(v) => v.to_owned(),
+            None => value::Value::Null
+        };
+        let current = json!({
+            "loop":{
+                "index": 0,
+                "index1": 1,
+                "is_first": true,
+                "is_last": false,
+                "parent": parent
+            }
+        });
+        self.tmp_var.push(current);
+        for b in b {
+            match b.as_rule() {
+                Rule::for_stmt => {
+                    let mut for_stmt = b.into_inner();
+                    let it = for_stmt.next().unwrap();
+                    let expr = for_stmt.next().unwrap();
+                    let expr = self.eval_expr(expr.into_inner());
+                    if !expr.is_array() && !expr.is_object() {
+                        panic!("Iterate over non-array/object is not support: {:?}", expr);
+                    }
+                    todo!()
+                }
+                Rule::for_body => {}
+                _ => unimplemented!(),
+            }
+        }
+        self.tmp_var.pop();
     }
     fn visit_block(&mut self, b: Pairs<Rule>) {
-        for b in b{
-            match b.as_rule(){
+        for b in b {
+            match b.as_rule() {
                 Rule::if_block => self.visit_if_block(b.into_inner()),
                 Rule::for_block => self.visit_for_block(b.into_inner()),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
     }
     fn visit_tmpl_unit(&mut self, unit: Pairs<Rule>) {
         //println!("Unit:{:?}", unit);
         //let unit = unit.to_owned().next().unwrap();
-
-        
         for tmpl_section in unit {
             //dbg!((tmpl_section.as_rule(), tmpl_section.as_str()));
             match tmpl_section.as_rule() {
@@ -348,7 +384,7 @@ fn strange_bug() {
     use crate::{Parser, RinjaParser};
     let renderer_tmpl = r#"## set a = b
 {{ a[1] }}
-## if a[0] == 0
+## if a[0] == 1
 abc
 ## set a[0] = 42
 ## else if a[1] == 1
@@ -356,12 +392,14 @@ abc
 ## else 
 789
 ## endif
-{{a[0] }}
+{{ a[0] }}
     "#;
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     // println!("{:?}", res.to_owned().unwrap());
-    let mut interp =
-        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(), 200);
+    let mut interp = Interpreter::new(
+        serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(),
+        200,
+    );
     interp.visit_tmpl_unit(res.unwrap());
     println!(
         "Renderer Template:\n{}\nRendererResult:\n{}",
@@ -382,8 +420,10 @@ fn test_num_expr() {
     let renderer_tmpl = "simple:{{ a }}, array:{{b[1]}},subs:{{c.a}}";
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     //println!("{:?}", res.to_owned().unwrap());
-    let mut interp =
-        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(), 200);
+    let mut interp = Interpreter::new(
+        serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(),
+        200,
+    );
     interp.visit_tmpl_unit(res.unwrap());
     println!(
         "Renderer Template:\n{}\nRendererResult:\n{}",
@@ -405,8 +445,10 @@ abc
     "#;
     let res = RinjaParser::parse(Rule::tmpl_unit, renderer_tmpl);
     //println!("{:?}", res.to_owned().unwrap());
-    let mut interp =
-        Interpreter::new(serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(), 200);
+    let mut interp = Interpreter::new(
+        serde_json::from_str(r#"{"a":43, "b":[0,1,2], "c":{"a":0}}"#).unwrap(),
+        200,
+    );
     interp.visit_tmpl_unit(res.unwrap());
     println!(
         "Renderer Template:\n{}\nRendererResult:\n{}",

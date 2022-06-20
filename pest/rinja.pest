@@ -66,9 +66,10 @@ else_stmt = _{ Lstmt ~ "else" ~ Rstmt
 endif = _{Lstmt ~ "endif" ~ Rstmt
 | lnstmt ~ "endif" ~ ("\n"|&EOI)}
 
-for_stmt = { Lstmt ~ 
-"for" ~ ((ident ~ "," ~ ident)|ident) ~ "in" ~ expr ~ Rstmt
-| lnstmt ~ "for" ~ ((ident ~ "," ~ ident)|ident) ~ "in" ~ expr ~ "\n"}
+iter = {(ident ~ "," ~ ident)|ident }
+for_stmt = { 
+  Lstmt ~ "for" ~ iter ~ "in" ~ expr ~ Rstmt
+| lnstmt ~ "for" ~ iter ~ "in" ~ expr ~ "\n"}
 
 endfor = _{Lstmt ~ "endfor" ~ Rstmt
 | lnstmt ~ "endfor" ~ ("\n"|&EOI)}
@@ -98,7 +99,8 @@ if_block = { if_stmt ~ if_body ~
             (else_if_stmt ~ else_if_body)* ~ 
             (else_stmt ~ else_body)?
              ~ endif}
-for_block = {for_stmt ~ (!endfor ~ tmpl_section)* ~ endfor}
+for_body = {(!endfor ~ tmpl_section)*}
+for_block = {for_stmt ~ for_body ~ endfor}
 block = {if_block | for_block}
 
 // to stop tmpl_literal
